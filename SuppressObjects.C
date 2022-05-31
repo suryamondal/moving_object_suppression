@@ -1,8 +1,8 @@
 
+typedef std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> argbData;
 
 const int nComp = 4;
 TString colorComponents[nComp] = {'A','R','G','B'};
-
 
 Byte_t getArgbComponent(const TString &color, const UInt_t &Argb) {
   int whichPart = -1;
@@ -12,11 +12,34 @@ Byte_t getArgbComponent(const TString &color, const UInt_t &Argb) {
   if(color == "B") {whichPart = 0;}
 
   if(whichPart < 0) {return 0;};
-
   return Byte_t ( (Argb >> (whichPart * 8)) & 0xFF ); 
 }
 
-std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> getImage(TASImage image) {
+TH2S* getColorHisto(const argbData &data, const int &rank) {
+  switch(rank) {
+  case 0:
+    return std::get<0>(data);
+  case 1:
+    return std::get<1>(data);
+  case 2:
+    return std::get<2>(data);
+  case 3:
+    return std::get<3>(data);
+  default:
+    return nullptr;
+  }
+}
+
+UInt_t setArgb32(const argbData &data, const UInt_t &xindx, const UInt_t &yindx) {
+  UInt_t argb32 = 0;
+  for(int ij=0;ij<nComp;ij++) {
+    argb32 <<= 8;
+    argb32 += getColorHisto(data, ij)->GetBinContent(xindx,yindx);
+  }
+  return argb32;
+}
+
+argbData getImage(TASImage image) {
   
   UInt_t yPixels = image.GetHeight();
   UInt_t xPixels = image.GetWidth();
@@ -39,10 +62,29 @@ std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> getImage(TASImage image) {
       }
     }
   }
-
   // delete argb;
-
   return std::make_tuple(histo[0], histo[1], histo[2], histo[3]);
+}
+
+int setImage(const argbData &data, TASImage &image) {
+  UInt_t yPixels = image.GetHeight();
+  UInt_t xPixels = image.GetWidth();
+  
+  UInt_t h_yPixels = (std::get<0>(data))->GetNbinsY();
+  UInt_t h_xPixels = (std::get<0>(data))->GetNbinsX();
+
+  if(yPixels != h_yPixels || xPixels != h_xPixels) {return 1;}
+
+  UInt_t *argb   = image.GetArgbArray();
+
+  for (int row=0; row<xPixels; ++row) {
+    for (int col=0; col<yPixels; ++col) {
+      int index = col*xPixels+row;
+      argb[index] = setArgb32(data, row+1, yPixels-col);
+    }
+  }
+    
+  return 0;
 }
 
 
@@ -59,10 +101,8 @@ void SuppressObjects(const TString &dir, const TString &log) {
   }
   int frameCount = filelist.size();
   
-  vector<TH2S*> hist_argb[nComp];
-  for(int ij=0;ij<nComp;ij++) {
-    hist_argb[ij].reserve(frameCount);
-  }
+  vector<argbData> hist_argb;
+  hist_argb.reserve(frameCount);
   
   for(int fcnt = 0; fcnt<frameCount; fcnt++) {
     Ssiz_t lastindex = filelist[fcnt].Last('.'); 
@@ -75,43 +115,57 @@ void SuppressObjects(const TString &dir, const TString &log) {
 
     auto returnHisto = getImage(image);
 
+    TH2S* histos[nComp];
     for(int ij=0;ij<nComp;ij++) {
-      TH2S* histo;
-      switch(ij) {
-      case 0:
-	histo = std::get<0>(returnHisto); break;
-      case 1:
-	histo = std::get<1>(returnHisto); break;
-      case 2:
-	histo = std::get<2>(returnHisto); break;
-      case 3:
-	histo = std::get<3>(returnHisto); break;
-      }
+      histos[ij] = getColorHisto(returnHisto, ij);
       TString name = rawname + "_" + colorComponents[ij];
-      histo->SetNameTitle(rawname,rawname);
-      hist_argb[ij].push_back(histo);
-
+      histos[ij]->SetNameTitle(rawname,rawname);
+      
       // TString tmpFilePath = dir + rawname + "_" + colorComponents[ij] + "_new.root";
       // histo->SaveAs(tmpFilePath);
     }
+    hist_argb.push_back(std::make_tuple(histos[0], histos[1], histos[2], histos[3]));
     
   } // for(int fcnt = 0; fcnt<frameCount; fcnt++) {
 
   for(int fcnt = 1; fcnt<frameCount; fcnt++) {
+    
+    Ssiz_t lastindex = filelist[fcnt].Last('.'); 
+    TString rawname = filelist[fcnt](0, lastindex);
+    cout<<" rawname "<<rawname<<endl;
+
+    TH2S* histos[nComp];
     for(int ij=0;ij<nComp;ij++) {
       
-      Ssiz_t lastindex = filelist[fcnt].Last('.'); 
-      TString rawname = filelist[fcnt](0, lastindex);
-      cout<<" rawname "<<rawname<<endl;
-      
-      TH2S* histo1 = (TH2S*)hist_argb[ij][fcnt-1]->Clone();
-      histo1->SetDirectory(0);
-      histo1->Add(hist_argb[ij][fcnt], -1);
+      histos[ij] = (TH2S*)(getColorHisto(hist_argb[fcnt-1], ij))->Clone();
+      histos[ij]->SetDirectory(0);
+
+      UInt_t h_yPixels = histos[ij]->GetNbinsY();
+      UInt_t h_xPixels = histos[ij]->GetNbinsX();
+      for (int row=0; row<h_xPixels; ++row) {
+	for (int col=0; col<h_yPixels; ++col) {
+	  Int_t tmpval = histos[ij]->GetBinContent(row+1, col+1) -
+	    getColorHisto(hist_argb[fcnt], ij)->GetBinContent(row+1, col+1);
+	  histos[ij]->SetBinContent(row+1, col+1, abs(tmpval));
+	}
+      }
       
       // TString tmpFilePath = dir + rawname + "_" + colorComponents[ij] + "_new.root";
       // histo1->SaveAs(tmpFilePath);
 
+      // delete histo1;
+
     } // for(int ij=0;ij<nComp;ij++) {
+
+    UInt_t h_yPixels = histos[0]->GetNbinsY();
+    UInt_t h_xPixels = histos[0]->GetNbinsX();
+        
+    TASImage image(h_xPixels, h_yPixels);
+    int status = setImage(std::make_tuple(histos[0], histos[1], histos[2], histos[3]), image);
+
+    TString tmpFilePath = dir + rawname + "_new.jpg";
+    image.WriteImage(tmpFilePath);
+    
   }   // for(int fcnt = 1; fcnt<frameCount; fcnt++) {
   
 }

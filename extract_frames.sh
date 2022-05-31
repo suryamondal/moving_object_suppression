@@ -13,6 +13,7 @@ echo 'file='$file
 cd $dir
 
 mkdir -p ../frames
+mkdir -p ../logs
 
 framecount=$(mediainfo --Inform='Video;%FrameCount%' $file)
 framerate=$(mediainfo --Inform='Video;%FrameRate%' $file)

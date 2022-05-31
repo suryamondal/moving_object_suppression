@@ -13,6 +13,9 @@ while read line; do
     if [[ "$line" == *"FrameDir="* ]]; then
         framedir="${line/FrameDir=/""}"
     fi
+    if [[ "$line" == *"LogPath="* ]]; then
+        logpath="${line/LogPath=/""}"
+    fi
     echo $line
 done < <(./extract_frames.sh $1)
 # echo 'FrameRate='$framerate
@@ -22,3 +25,4 @@ done < <(./extract_frames.sh $1)
 # makes sure that you return to base directory
 cd $hDir
 
+./wrapper.py $framedir $logpath

@@ -4,9 +4,10 @@ This project is to remove fast moving objects from images or video. It could be 
 How to run:
 ```
 ./run_for_video.sh path/to/video/file
+./run_for_image.sh path/to/image/directory
 ```
 All the other scripts are executed inside this script.
 
 ### Requirements:
-- CERN ROOT
+- `CERN ROOT`
 - `ffmpeg`

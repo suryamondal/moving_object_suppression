@@ -3,8 +3,8 @@ This project is to remove fast moving objects from images or video. It could be 
 
 How to run:
 ```
-./run_for_video.sh path/to/video/file
-./run_for_image.sh path/to/image/directory
+./run_for_video.sh path/to/video/file        (under construction)
+./run_for_image.sh path/to/image/directory   (will be)
 ```
 All the other scripts are executed inside this script.
 

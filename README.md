@@ -11,3 +11,6 @@ All the other scripts are executed inside this script.
 ### Requirements:
 - `CERN ROOT`
 - `ffmpeg`
+- `mediainfo`
+
+### Tested on UbuntuMate2020LTS with ROOTv6.20

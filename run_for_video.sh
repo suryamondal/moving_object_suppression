@@ -22,7 +22,12 @@ done < <(./extract_frames.sh $1)
 # echo 'FrameCount='$framecount
 # echo 'FrameDir='$framedir
 
+cd $framedir
+mkdir -p ../tmp/
+cd ../tmp/
+tmpdir=`pwd`"/"
+
 # makes sure that you return to base directory
 cd $hDir
 
-./wrapper.py $framedir $logpath
+./wrapper.py $framedir $tmpdir $logpath

@@ -180,8 +180,10 @@ int getDifference(TASImage &image,
 }
 
 
-void SuppressObjects(const TString &dir, const TString &log) {
-
+void SuppressObjects(const TString &dir,
+		     const TString &tdir,
+		     const TString &log) {
+  
   vector<TString> filelist;
   ifstream file_db(log);
   while(!file_db.eof()) {
@@ -227,7 +229,7 @@ void SuppressObjects(const TString &dir, const TString &log) {
 	}
       }
 
-      TString tmpFilePath = dir + rawname + "_new.jpg";
+      TString tmpFilePath = tdir + rawname + "_diff.jpg";
       image1.WriteImage(tmpFilePath);
       
     } // if(fcnt>0) {

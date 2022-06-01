@@ -10,12 +10,12 @@ SCRIPT_NAME = os.path.basename(SCRIPT_PATH)
 
 if __name__ == "__main__":
     args = sys.argv[1:] if len(sys.argv) > 1 else []
-    if len(args) != 2:
+    if len(args) != 3:
         print(__doc__)
         print(f"Usage: ./{SCRIPT_NAME} FrameDir LogFile")
     else:
         os.chdir(SCRIPT_DIR)
-        macro = f'SuppressObjects.C("{args[0]}","{args[1]}")'
+        macro = f'SuppressObjects.C("{args[0]}","{args[1]}","{args[2]}")'
         cl = ['root', '-l', '-b', '-q', macro]
         print(cl)
         sys.exit(subprocess.run(cl).returncode)

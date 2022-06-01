@@ -1,4 +1,6 @@
 
+const int debugLevel = 0;
+
 typedef std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> argbData;
 
 const int nComp = 4;
@@ -29,7 +31,12 @@ Byte_t getArgb32Component(const TString &color,
   if(color == "B") {whichPart = 0;}
 
   if(whichPart < 0) {return 0;};
-  return Byte_t ( (Argb >> (whichPart * 8)) & 0xFF ); 
+  Byte_t outval =  (Argb >> (whichPart * 8)) & 0xFF;
+  if(debugLevel == 1) {
+    std::cout<<" color get "<<color
+	     <<" "<<std::bitset<32>(Argb)
+	     <<" "<<std::bitset<8>(outval)<<std::endl;}
+  return outval;
 }
 
 void setArgb32Component(const TString &color,
@@ -42,19 +49,24 @@ void setArgb32Component(const TString &color,
   if(color == "B") {whichPart = 0;}
 
   if(whichPart < 0) {std::cout<<" wrong component "<<std::endl;};
-
+  if(debugLevel == 1) {
+    std::cout<<" color set "<<color
+	     <<" "<<std::bitset<8>(comp)<<std::endl;}
+  
   /** setting the color byte to zero */
   UInt_t tArgb = 0xFF;
   tArgb <<= whichPart * 8;
   tArgb ^= 0xFFFFFFFF;
   Argb &= tArgb;
+  if(debugLevel == 1) {
+    std::cout<<"   set zero "<<std::bitset<32>(Argb)<<std::endl;}
 
   /** setting the color byte to comp */
   tArgb = comp;
   tArgb <<= whichPart * 8;
   Argb += tArgb;
-
-  return Argb; 
+  if(debugLevel == 1) {
+    std::cout<<"   set byte "<<std::bitset<32>(Argb)<<std::endl;}
 }
 
 UInt_t setArgb32(const argbData &data,
@@ -117,9 +129,13 @@ int setImage(const argbData &data,
   return 0;
 }
 
-TASImage getDifference(TASImage image1,
-		       TASImage image2) {
+int getDifference(TASImage &image,
+		   TASImage image1,
+		   TASImage image2) {
   /** return = image1 - image2 */
+
+  UInt_t yPixels  = image.GetHeight();
+  UInt_t xPixels  = image.GetWidth();
 
   UInt_t yPixels1 = image1.GetHeight();
   UInt_t xPixels1 = image1.GetWidth();
@@ -127,26 +143,40 @@ TASImage getDifference(TASImage image1,
   UInt_t yPixels2 = image2.GetHeight();
   UInt_t xPixels2 = image2.GetWidth();
 
-  if(yPixels1 != yPixels2 || xPixels1 != xPixels2) {return TASImage();}
+  if((yPixels1 != yPixels2) ||
+     (xPixels1 != xPixels2) ||
+     (yPixels  != yPixels1) ||
+     (xPixels  != xPixels1) ) {return 1;}
   
   UInt_t *argb1   = image1.GetArgbArray();
   UInt_t *argb2   = image2.GetArgbArray();
-
-  TASImage image(xPixels1, yPixels1);
   UInt_t *argb    = image.GetArgbArray();
   
   for (int row=0; row<xPixels1; ++row) {
     for (int col=0; col<yPixels1; ++col) {
+
       int index = col*xPixels1+row;
+      UInt_t tArgb32 = argb[index];
       for(int ij=0;ij<nComp;ij++) {
-	setArgb32Component(colorComponents[ij], argb[index],
-			   (getArgb32Component(colorComponents[ij], argb1[index]) -
-			    getArgb32Component(colorComponents[ij], argb2[index])) );
-      }
+	Byte_t tmpval1 = getArgb32Component(colorComponents[ij],
+					   argb1[index]);
+	Byte_t tmpval2 = getArgb32Component(colorComponents[ij],
+					   argb2[index]);
+	Byte_t tmpval = (tmpval1 < tmpval2) ? (tmpval2 - tmpval1) : (tmpval1 - tmpval2);
+	// if(colorComponents[ij]=="A") {tmpval = 0xFF;}
+	if(debugLevel == 1) {
+	  std::cout<<" tmpval "<<std::bitset<32>(tmpval)<<std::endl;}
+	setArgb32Component(colorComponents[ij], tArgb32, tmpval);
+	if(debugLevel == 1) {
+	  std::cout<<" tArgb32 "<<std::bitset<32>(tArgb32)<<std::endl;}
+      }	// for(int ij=0;ij<nComp;ij++) {
+      argb[index] = tArgb32;
+      if(debugLevel == 1) {
+	std::cout<<" argb[index] "<<std::bitset<32>(argb[index])<<std::endl;}
     }
   }
 
-  return image;
+  return 0;
 }
 
 
@@ -176,57 +206,31 @@ void SuppressObjects(const TString &dir, const TString &log) {
     TASImage image(filePath);
     hist_image.push_back(image);
 
-    auto returnHisto = getImage(image);
-
-    TH2S* histos[nComp];
-    for(int ij=0;ij<nComp;ij++) {
-      histos[ij] = getColorHisto(returnHisto, ij);
-      TString name = rawname + "_" + colorComponents[ij];
-      histos[ij]->SetNameTitle(rawname,rawname);
-    }
-
     if(fcnt>0) {
 
-      auto returnHisto1 = getImage(hist_image[hist_image.size()-2]);
+      UInt_t yPixels = image.GetHeight();
+      UInt_t xPixels = image.GetWidth();
+        
+      TASImage image1(xPixels, yPixels);
 
-      TH2S* histos1[nComp];
-      for(int ij=0;ij<nComp;ij++) {
-	histos1[ij] = getColorHisto(returnHisto1, ij);
-	TString name = rawname + "_" + colorComponents[ij] + "_new";
-	histos1[ij]->SetNameTitle(rawname,rawname);
-      }
+      int status = getDifference(image1,
+				 image,
+				 hist_image[hist_image.size()-2]);
 
-      for(int ij=0;ij<nComp;ij++) {
-	UInt_t h_yPixels = histos1[ij]->GetNbinsY();
-	UInt_t h_xPixels = histos1[ij]->GetNbinsX();
-	for (int row=0; row<h_xPixels; ++row) {
-	  for (int col=0; col<h_yPixels; ++col) {
-	    Int_t tmpval = histos1[ij]->GetBinContent(row+1, col+1) -
-	      histos[ij]->GetBinContent(row+1, col+1);
-	    histos1[ij]->SetBinContent(row+1, col+1, abs(tmpval));
+      if(debugLevel == 2) {
+	UInt_t *argb   = image1.GetArgbArray();
+	for (int row=0; row<xPixels; ++row) {
+	  for (int col=0; col<yPixels; ++col) {
+	    int index = col*xPixels+row;
+      	    std::cout<<" argb[index] "<<std::bitset<32>(argb[index])<<std::endl;
 	  }
 	}
-
-      } // for(int ij=0;ij<nComp;ij++) {
-
-      UInt_t h_yPixels = histos1[0]->GetNbinsY();
-      UInt_t h_xPixels = histos1[0]->GetNbinsX();
-        
-      TASImage image1(h_xPixels, h_yPixels);
-      int status = setImage(std::make_tuple(histos1[0], histos1[1], histos1[2], histos1[3]), image1);
+      }
 
       TString tmpFilePath = dir + rawname + "_new.jpg";
       image1.WriteImage(tmpFilePath);
-
-      for(int ij=0;ij<nComp;ij++) {
-	delete histos1[ij];
-      }
       
     } // if(fcnt>0) {
-
-    for(int ij=0;ij<nComp;ij++) {
-      delete histos[ij];
-    }
   } // for(int fcnt = 0; fcnt<frameCount; fcnt++) {
   
 }

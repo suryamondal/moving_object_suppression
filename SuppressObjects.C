@@ -1,5 +1,6 @@
 
 const int debugLevel = 0;
+const Byte_t limit   = 20;
 
 typedef std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> argbData;
 
@@ -80,7 +81,7 @@ UInt_t setArgb32(const argbData &data,
   return argb32;
 }
 
-argbData getImage(TASImage image) {
+argbData getImage(TASImage &image) {
   
   UInt_t yPixels = image.GetHeight();
   UInt_t xPixels = image.GetWidth();
@@ -103,7 +104,6 @@ argbData getImage(TASImage image) {
       }
     }
   }
-  // delete argb;
   return std::make_tuple(histo[0], histo[1], histo[2], histo[3]);
 }
 
@@ -125,13 +125,12 @@ int setImage(const argbData &data,
       argb[index] = setArgb32(data, row+1, yPixels-col);
     }
   }
-    
   return 0;
 }
 
 int getDifference(TASImage &image,
-		   TASImage image1,
-		   TASImage image2) {
+		  TASImage &image1,
+		  TASImage &image2) {
   /** return = image1 - image2 */
 
   UInt_t yPixels  = image.GetHeight();
@@ -159,9 +158,9 @@ int getDifference(TASImage &image,
       UInt_t tArgb32 = argb[index];
       for(int ij=0;ij<nComp;ij++) {
 	Byte_t tmpval1 = getArgb32Component(colorComponents[ij],
-					   argb1[index]);
+					    argb1[index]);
 	Byte_t tmpval2 = getArgb32Component(colorComponents[ij],
-					   argb2[index]);
+					    argb2[index]);
 	Byte_t tmpval = (tmpval1 < tmpval2) ? (tmpval2 - tmpval1) : (tmpval1 - tmpval2);
 	// if(colorComponents[ij]=="A") {tmpval = 0xFF;}
 	if(debugLevel == 1) {
@@ -179,6 +178,45 @@ int getDifference(TASImage &image,
   return 0;
 }
 
+int setDiffNull(TASImage &image,
+		TASImage &image1,
+		const Byte_t &lim) {
+
+  UInt_t yPixels  = image.GetHeight();
+  UInt_t xPixels  = image.GetWidth();
+  
+  UInt_t yPixels1 = image1.GetHeight();
+  UInt_t xPixels1 = image1.GetWidth();
+
+  if((yPixels != yPixels1) ||
+     (xPixels != xPixels1) ) {return 1;}
+
+  UInt_t *argb    = image.GetArgbArray();
+  UInt_t *argb1   = image1.GetArgbArray();
+
+  for (int row=0; row<xPixels1; ++row) {
+    for (int col=0; col<yPixels1; ++col) {
+      int index = col*xPixels1+row;
+      // std::cout<<" argb1[index] "<<std::bitset<32>(argb1[index])<<std::endl;
+      bool isSetNull = 0;
+      for(int ij=1;ij<nComp;ij++) {
+	Byte_t tmpval1 = getArgb32Component(colorComponents[ij],
+					    argb1[index]);
+	// std::cout<<" color "<<colorComponents[ij]<<" lim "<<int(lim)<<" tmpval1 "<<int(tmpval1)<<std::endl;
+	if(tmpval1 > lim) {isSetNull = true; break;}
+      }
+      // std::cout<<" isSetNull "<<isSetNull<<std::endl;
+      if(isSetNull) {
+	argb[index] = 0xFFFFFFFF;
+      }
+      // std::cout<<" argb[index] "<<std::bitset<32>(argb[index])<<std::endl;
+    }
+  }
+  return 0;
+}
+
+
+  
 
 void SuppressObjects(const TString &dir,
 		     const TString &tdir,
@@ -195,8 +233,9 @@ void SuppressObjects(const TString &dir,
   }
   int frameCount = filelist.size();
   
-  vector<TASImage> hist_image;
+  vector<TASImage> hist_image, hist_image_null;
   hist_image.reserve(frameCount);
+  hist_image_null.reserve(frameCount);
   
   for(int fcnt = 0; fcnt<frameCount; fcnt++) {
 
@@ -229,9 +268,16 @@ void SuppressObjects(const TString &dir,
 	}
       }
 
-      TString tmpFilePath = tdir + rawname + "_diff.jpg";
-      image1.WriteImage(tmpFilePath);
-      
+      // TString tmpFilePath = tdir + rawname + "_diff.jpg";
+      // image1.WriteImage(tmpFilePath);
+
+      TASImage image2(filePath);
+      status = setDiffNull(image2, image1, limit);
+      hist_image_null.push_back(image2);
+
+      TString tmpFilePath1 = tdir + rawname + "_null.jpg";
+      image2.WriteImage(tmpFilePath1);
+
     } // if(fcnt>0) {
   } // for(int fcnt = 0; fcnt<frameCount; fcnt++) {
   

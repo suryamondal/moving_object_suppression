@@ -1,11 +1,13 @@
 
-const int debugLevel = 0;
-const Byte_t limit   = 20;
+const int      debugLevel  = 0;
+const Byte_t   limit       = 20;
+const int      maxVecLim   = 10;
+const int      nComp       = 4;
+TString        colorComponents[nComp] = {'A','R','G','B'};
+
 
 typedef std::tuple<TH2S*,TH2S*,TH2S*,TH2S*> argbData;
 
-const int nComp = 4;
-TString colorComponents[nComp] = {'A','R','G','B'};
 
 TH2S* getColorHisto(const argbData &data,
 		    const int &rank) {
@@ -104,6 +106,7 @@ argbData getImage(TASImage &image) {
       }
     }
   }
+  image.EndPaint();
   return std::make_tuple(histo[0], histo[1], histo[2], histo[3]);
 }
 
@@ -125,6 +128,7 @@ int setImage(const argbData &data,
       argb[index] = setArgb32(data, row+1, yPixels-col);
     }
   }
+  image.EndPaint();
   return 0;
 }
 
@@ -174,7 +178,9 @@ int getDifference(TASImage &image,
 	std::cout<<" argb[index] "<<std::bitset<32>(argb[index])<<std::endl;}
     }
   }
-
+  image.EndPaint();
+  image1.EndPaint();
+  image2.EndPaint();
   return 0;
 }
 
@@ -212,9 +218,40 @@ int setDiffNull(TASImage &image,
       // std::cout<<" argb[index] "<<std::bitset<32>(argb[index])<<std::endl;
     }
   }
+  image.EndPaint();
+  image1.EndPaint();
   return 0;
 }
 
+
+void fillNull(TASImage &image,
+	      vector<TASImage> &hist_image) {
+
+  UInt_t yPixels  = image.GetHeight();
+  UInt_t xPixels  = image.GetWidth();
+  UInt_t *argb    = image.GetArgbArray();
+
+  for (int row=0; row<xPixels; ++row) {
+    for (int col=0; col<yPixels; ++col) {
+      int index = col*xPixels+row;
+      if(argb[index] == 0xFFFFFFFF || argb[index] == 0) {
+	// std::cout<<" 0 argb[index] "<<std::bitset<32>(argb[index])<<std::endl;
+	for(int ij=hist_image.size()-1;ij>=0;ij--) {
+	  // TASImage image1 = hist_image[ij];
+	  // UInt_t *argb1    = image1.GetArgbArray();
+	  UInt_t *argb1    = hist_image[ij].GetArgbArray();
+	  // std::cout<<" 0 argb1[index] "<<std::bitset<32>(argb1[index])<<" "<<ij<<std::endl;
+	  if(argb1[index] != argb[index]) {
+	    argb[index] = argb1[index];
+	    // std::cout<<" 1 argb[index] "<<std::bitset<32>(argb[index])<<std::endl;
+	    break;
+	  } // if(argb1[index] != 0xFFFFFFFF) {
+	}
+      }	// if(argb[index] == 0xFFFFFFFF) {
+    }
+  }
+  image.EndPaint();
+}
 
   
 
@@ -233,9 +270,17 @@ void SuppressObjects(const TString &dir,
   }
   int frameCount = filelist.size();
   
-  vector<TASImage> hist_image, hist_image_null;
+  vector<TASImage> hist_image, hist_image_diff, hist_image_null;
   hist_image.reserve(frameCount);
+  hist_image_diff.reserve(frameCount);
   hist_image_null.reserve(frameCount);
+
+  if(int(hist_image.size())>maxVecLim) {
+    hist_image.erase(hist_image.begin());}
+  if(int(hist_image_diff.size())>maxVecLim) {
+    hist_image_diff.erase(hist_image_diff.begin());}
+  if(int(hist_image_null.size())>maxVecLim) {
+    hist_image_null.erase(hist_image_null.begin());}
   
   for(int fcnt = 0; fcnt<frameCount; fcnt++) {
 
@@ -251,9 +296,8 @@ void SuppressObjects(const TString &dir,
 
       UInt_t yPixels = image.GetHeight();
       UInt_t xPixels = image.GetWidth();
-        
-      TASImage image1(xPixels, yPixels);
 
+      TASImage image1(xPixels, yPixels);
       int status = getDifference(image1,
 				 image,
 				 hist_image[hist_image.size()-2]);
@@ -273,6 +317,20 @@ void SuppressObjects(const TString &dir,
 
       TASImage image2(filePath);
       status = setDiffNull(image2, image1, limit);
+      hist_image_diff.push_back(image2);
+
+      if(debugLevel == 3 && int(hist_image_diff.size())) {
+	UInt_t *argb1   = hist_image_diff.back().GetArgbArray();
+	for (int row=0; row<xPixels; ++row) {
+	  for (int col=0; col<yPixels; ++col) {
+	    int index = col*xPixels+row;
+      	    std::cout<<" argb1[index] "<<std::bitset<32>(argb1[index])<<std::endl;
+	  }
+	}
+      }
+
+      fillNull(image2, hist_image_diff);
+      image2.EndPaint();
       hist_image_null.push_back(image2);
 
       TString tmpFilePath1 = tdir + rawname + "_null.jpg";

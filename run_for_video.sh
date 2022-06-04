@@ -30,4 +30,4 @@ tmpdir=`pwd`"/"
 # makes sure that you return to base directory
 cd $hDir
 
-./wrapper.py $framedir $tmpdir $logpath
+./wrapper.py SuppressObjects $framedir $tmpdir $logpath
